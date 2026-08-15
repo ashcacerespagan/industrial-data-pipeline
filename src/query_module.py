@@ -2,33 +2,35 @@ import sqlite3
 
 DB_PATH = "data/industrial_data.db"
 
-def get_device_summary():
-    """Get average and max reading per device."""
+def get_yield_by_panel_type():
+    """Calculate pass/fail totals by panel model."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
     query = """
-        SELECT device_id, 
-               ROUND(AVG(raw_reading), 2) AS avg_reading, 
-               MAX(raw_reading) AS peak_reading,
-               COUNT(*) AS total_logs
-        FROM staging_sensor_logs
-        GROUP BY device_id;
+        SELECT panel_type,
+               COUNT(*) AS total_tested,
+               SUM(CASE WHEN test_status = 'PASS' THEN 1 ELSE 0 END) AS passed,
+               SUM(CASE WHEN test_status = 'FAIL' THEN 1 ELSE 0 END) AS failed,
+               ROUND(AVG(defect_count), 2) AS avg_defects
+        FROM panel_inspection_logs
+        GROUP BY panel_type;
     """
     cursor.execute(query)
     rows = cursor.fetchall()
     conn.close()
     return rows
 
-def get_warnings_and_errors():
-    """Retrieve logs marked with WARN or ERR status."""
+def get_failed_panel_defects():
+    """Retrieve details for failed panels with high defect counts."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
     query = """
-        SELECT device_id, timestamp, raw_reading, status_code
-        FROM staging_sensor_logs
-        WHERE status_code IN ('WARN', 'ERR')
+        SELECT test_id, serial_number, panel_type, defect_count, voltage_v, current_ma
+        FROM panel_inspection_logs
+        WHERE test_status IN ('FAIL', 'RETEST')
+        ORDER BY defect_count DESC
         LIMIT 5;
     """
     cursor.execute(query)
@@ -37,10 +39,10 @@ def get_warnings_and_errors():
     return rows
 
 if __name__ == "__main__":
-    print("--- Device Performance Summary ---")
-    for row in get_device_summary():
-        print(f"Device: {row[0]} | Avg: {row[1]} | Peak: {row[2]} | Logs: {row[3]}")
+    print("--- Yield Summary by Panel Model ---")
+    for row in get_yield_by_panel_type():
+        print(f"Model: {row[0]} | Tested: {row[1]} | Passed: {row[2]} | Failed: {row[3]} | Avg Defects: {row[4]}")
         
-    print("\n--- Recent Warnings / Errors ---")
-    for row in get_warnings_and_errors():
-        print(f"Device: {row[0]} | Time: {row[1]} | Value: {row[2]} | Status: {row[3]}")
+    print("\n--- Critical Defect Inspection Units ---")
+    for row in get_failed_panel_defects():
+        print(f"Test ID: {row[0]} | SN: {row[1]} | Model: {row[2]} | Defects: {row[3]} | V: {row[4]} | mA: {row[5]}")

@@ -1,0 +1,9 @@
+{
+    "run_timestamp": "2026-08-15T17:38:55.152497",
+    "total_units_tested": 150,
+    "first_pass_yield_pct": 65.33,
+    "failed_units": 27,
+    "retest_units": 25,
+    "avg_defect_count": 3.03,
+    "max_defects_on_unit": 12
+}
