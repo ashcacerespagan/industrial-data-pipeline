@@ -1,65 +1,65 @@
-import pandas as pd
-from sqlalchemy import create_engine
-import datetime
+import csv
+import sqlite3
 import json
+import datetime
 import os
 
-DB_PATH = "sqlite:///data/industrial_data.db"
+DB_PATH = "data/industrial_data.db"
+CSV_PATH = "data/raw_sensor_logs.csv"
 
-def extract_data(filepath: str) -> pd.DataFrame:
-    """Extract raw sensor data from CSV log files."""
-    print(f"[Extract] Loading data from {filepath}...")
-    df = pd.read_csv(filepath)
-    df['timestamp'] = pd.to_datetime(df['timestamp'])
-    return df
+# 1. READ CSV DATA
+print("1. Reading raw CSV logs...")
+records = []
+with open(CSV_PATH, "r") as f:
+    reader = csv.DictReader(f)
+    for row in reader:
+        records.append({
+            "device_id": row["device_id"],
+            "timestamp": row["timestamp"],
+            "raw_reading": float(row["raw_reading"]),
+            "status_code": row["status_code"]
+        })
 
-def transform_data(df: pd.DataFrame) -> pd.DataFrame:
-    """Clean data and calculate aggregated device metrics."""
-    print("[Transform] Cleaning and aggregating sensor metrics...")
-    
-    valid_df = df[df['status_code'] == 'OK'].copy()
-    valid_df['window_start'] = valid_df['timestamp'].dt.floor('h')
-    
-    transformed = valid_df.groupby(['device_id', 'window_start']).agg(
-        avg_reading=('raw_reading', 'mean'),
-        max_reading=('raw_reading', 'max')
-    ).reset_index()
-    
-    # Track historical insertion timestamp
-    transformed['created_at'] = datetime.datetime.now().isoformat()
-    return transformed
+# 2. SAVE TO SQLITE DATABASE
+print("2. Saving records to SQLite database...")
+conn = sqlite3.connect(DB_PATH)
+cursor = conn.cursor()
 
-def load_data(df: pd.DataFrame, db_engine) -> None:
-    """Append transformed metrics into SQLite database."""
-    print("[Load] Appending metrics to 'processed_sensor_metrics' table...")
-    df.to_sql('processed_sensor_metrics', db_engine, if_exists='append', index=False)
+cursor.execute("""
+    CREATE TABLE IF NOT EXISTS staging_sensor_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        device_id TEXT,
+        timestamp TEXT,
+        raw_reading REAL,
+        status_code TEXT,
+        created_at TEXT
+    )
+""")
 
-def export_json_summary(df: pd.DataFrame, output_path="data/latest_run.json") -> None:
-    """Export the current run's summary for Git tracking and diffs."""
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    
+now = datetime.datetime.now().isoformat()
+for r in records:
+    cursor.execute(
+        "INSERT INTO staging_sensor_logs (device_id, timestamp, raw_reading, status_code, created_at) VALUES (?, ?, ?, ?, ?)",
+        (r["device_id"], r["timestamp"], r["raw_reading"], r["status_code"], now)
+    )
+
+conn.commit()
+conn.close()
+
+# 3. EXPORT JSON SUMMARY
+print("3. Exporting JSON summary...")
+if records:
+    readings = [r["raw_reading"] for r in records]
     summary = {
-        "run_timestamp": datetime.datetime.now().isoformat(),
-        "total_records_processed": len(df),
-        "devices_monitored": df['device_id'].nunique(),
-        "overall_avg_reading": round(df['avg_reading'].mean(), 2),
-        "peak_reading": round(df['max_reading'].max(), 2),
-        "metrics_preview": df.head(5).to_dict(orient="records")
+        "last_updated": now,
+        "total_records": len(records),
+        "avg_reading": round(sum(readings) / len(readings), 2),
+        "max_reading": max(readings),
+        "min_reading": min(readings)
     }
     
-    with open(output_path, "w") as f:
+    os.makedirs("data", exist_ok=True)
+    with open("data/latest_run.json", "w") as f:
         json.dump(summary, f, indent=4)
-        
-    print(f"[Export] Saved latest run summary to {output_path}")
 
-if __name__ == "__main__":
-    engine = create_engine(DB_PATH)
-    raw_csv = "data/raw_sensor_logs.csv"
-    
-    raw_df = extract_data(raw_csv)
-    transformed_df = transform_data(raw_df)
-    
-    # Store history in SQLite & export diffable JSON
-    load_data(transformed_df, engine)
-    export_json_summary(transformed_df)
-    print("[Success] Pipeline completed successfully.")
+print("ETL pipeline completed successfully!")

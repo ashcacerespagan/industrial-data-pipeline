@@ -1,10 +1,7 @@
 {
-    "run_timestamp": "2026-08-15T17:00:50.301283",
-    "total_records_processed": 116,
-    "devices_monitored": 5,
-    "overall_avg_reading": 76.91,
-    "peak_reading": 113.81,
-    "metrics_preview": [
-        {
-            "device_id": "SENSOR_001",
-            "window_start": 
+    "last_updated": "2026-08-15T17:20:03.500078",
+    "total_records": 100,
+    "avg_reading": 78.5,
+    "max_reading": 94.81,
+    "min_reading": 60.04
+}
