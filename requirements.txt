@@ -1,0 +1,8 @@
+greenlet==3.5.5
+numpy==2.5.2
+pandas==3.0.5
+psycopg2-binary==2.9.12
+python-dateutil==2.9.0.post0
+six==1.17.0
+SQLAlchemy==2.0.52
+typing_extensions==4.16.0
